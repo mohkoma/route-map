@@ -13,9 +13,10 @@
     href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css"
   />
   <style>
-    body {
+    html, body {
       margin: 0;
       padding: 0;
+      height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     
@@ -24,6 +25,7 @@
       color: white;
       padding: 20px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      position: relative;
     }
     
     .header h1 {
@@ -36,6 +38,21 @@
       margin: 0;
       opacity: 0.9;
       font-size: 16px;
+    }
+    
+    .timezone-display {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(10px);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
     
     .upload-section {
@@ -140,8 +157,18 @@
       border-left: 3px solid #667eea;
     }
     
+    #mapContainer {
+      position: fixed;
+      top: 180px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: calc(100vh - 180px);
+    }
+    
     #map { 
-      height: calc(100vh - 180px); 
+      height: 100%; 
       width: 100%; 
     }
     
@@ -191,6 +218,9 @@
   <div class="header">
     <h1>🗺️ Route Map CSV Uploader</h1>
     <p>Upload a CSV file with latitude, longitude, and timestamp data to visualize your route</p>
+    <div id="timezoneDisplay" class="timezone-display">
+      🌍 Local Timezone: <span id="timezoneName">Loading...</span>
+    </div>
   </div>
   
   <div class="upload-section">
@@ -216,7 +246,9 @@
     
   </div>
   
-  <div id="map"></div>
+  <div id="mapContainer">
+    <div id="map"></div>
+  </div>
   
   <div id="infoPanel" class="bottom-info">
     <div class="info-panel">
@@ -237,6 +269,23 @@
     let routingControl = null;
     let waypointMarkers = [];
     let currentRouteData = null;
+
+    // Initialize timezone display
+    function initializeTimezoneDisplay() {
+      try {
+        // Get the user's timezone
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const timezoneName = timezone.replace(/_/g, ' '); // Replace underscores with spaces
+        
+        // Update the display
+        document.getElementById('timezoneName').textContent = timezoneName;
+        
+        console.log('User timezone detected:', timezone);
+      } catch (e) {
+        console.error('Error detecting timezone:', e);
+        document.getElementById('timezoneName').textContent = 'Unknown';
+      }
+    }
 
     // Initialize map
     function initializeMap() {
@@ -358,19 +407,44 @@
       return R * c;
     }
 
-    // Format timestamp
+    // Format timestamp - converts UTC to user's local timezone
     function formatTimestamp(timestamp) {
       if (!timestamp) return 'No timestamp';
       
       try {
-        const date = new Date(timestamp);
-        return date.toLocaleString();
+        // Parse the timestamp and treat it as UTC if it doesn't have timezone info
+        let date;
+        
+        // Check if timestamp already has timezone info (contains 'Z', '+', or '-')
+        if (timestamp.includes('Z') || timestamp.includes('+') || timestamp.includes('-')) {
+          date = new Date(timestamp);
+        } else {
+          // Assume UTC if no timezone info is present
+          // Add 'Z' to indicate UTC timezone
+          const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
+          date = new Date(utcTimestamp);
+        }
+        
+        // Check if date is valid
+        if (isNaN(date.getTime())) {
+          return timestamp; // Return original if parsing failed
+        }
+        
+        // Format in user's local timezone as YYYY-MM-DD HH:MM:SS
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       } catch (e) {
         return timestamp;
       }
     }
 
-    // Calculate route duration
+    // Calculate route duration - handles UTC timestamps
     function calculateDuration(data) {
       if (data.length < 2) return 'N/A';
       
@@ -380,8 +454,21 @@
       if (!firstTime || !lastTime) return 'N/A';
       
       try {
-        const start = new Date(firstTime);
-        const end = new Date(lastTime);
+        // Parse timestamps as UTC if no timezone info is present
+        let start, end;
+        
+        if (firstTime.includes('Z') || firstTime.includes('+') || firstTime.includes('-')) {
+          start = new Date(firstTime);
+        } else {
+          start = new Date(firstTime.endsWith('Z') ? firstTime : firstTime + 'Z');
+        }
+        
+        if (lastTime.includes('Z') || lastTime.includes('+') || lastTime.includes('-')) {
+          end = new Date(lastTime);
+        } else {
+          end = new Date(lastTime.endsWith('Z') ? lastTime : lastTime + 'Z');
+        }
+        
         const durationMs = end - start;
         const hours = Math.floor(durationMs / (1000 * 60 * 60));
         const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -432,7 +519,7 @@
       return `${speedKmh.toFixed(1)} km/h`;
     }
 
-    // Create enhanced route that looks more realistic
+    // Create enhanced route that looks more realistic with advanced smoothing
     function createEnhancedRoute(coordinates, data) {
       if (coordinates.length < 2) return coordinates;
       
@@ -453,27 +540,38 @@
         
         // Determine how many intermediate points to add based on speed and distance
         let numPoints = 0;
-        if (distance > 0.05) { // 50m minimum
-          if (avgSpeed > 50) { // High speed - fewer points (highway)
-            numPoints = Math.min(Math.floor(distance * 5), 3);
-          } else if (avgSpeed > 20) { // Medium speed - moderate points (city)
-            numPoints = Math.min(Math.floor(distance * 8), 4);
-          } else { // Low speed - more points (residential/stop-and-go)
-            numPoints = Math.min(Math.floor(distance * 12), 6);
+        if (distance > 0.02) { // 20m minimum for smoother routes
+          if (avgSpeed > 60) { // High speed - fewer points (highway)
+            numPoints = Math.min(Math.floor(distance * 8), 5);
+          } else if (avgSpeed > 30) { // Medium speed - moderate points (city)
+            numPoints = Math.min(Math.floor(distance * 12), 8);
+          } else if (avgSpeed > 10) { // Low speed - more points (residential)
+            numPoints = Math.min(Math.floor(distance * 20), 12);
+          } else { // Very low speed - many points (stop-and-go)
+            numPoints = Math.min(Math.floor(distance * 30), 15);
           }
         }
         
-        // Add intermediate points with slight curve variation
+        // Add intermediate points with advanced curve variation
         for (let j = 1; j <= numPoints; j++) {
           const ratio = j / (numPoints + 1);
           
-          // Add slight curve variation to make it look more natural
-          const curveFactor = Math.sin(ratio * Math.PI) * 0.0001; // Small curve
-          const perpendicularLat = (next[1] - current[1]) * curveFactor;
-          const perpendicularLng = -(next[0] - current[0]) * curveFactor;
+          // Create more realistic curves using multiple sine waves
+          const curve1 = Math.sin(ratio * Math.PI) * 0.0002;
+          const curve2 = Math.sin(ratio * Math.PI * 2) * 0.0001;
+          const curve3 = Math.sin(ratio * Math.PI * 0.5) * 0.00005;
           
-          const lat = current[0] + (next[0] - current[0]) * ratio + perpendicularLat;
-          const lng = current[1] + (next[1] - current[1]) * ratio + perpendicularLng;
+          const totalCurve = curve1 + curve2 + curve3;
+          
+          // Apply curve perpendicular to the direction of travel
+          const perpendicularLat = (next[1] - current[1]) * totalCurve;
+          const perpendicularLng = -(next[0] - current[0]) * totalCurve;
+          
+          // Add slight random variation for more natural look
+          const randomVariation = (Math.random() - 0.5) * 0.00001;
+          
+          const lat = current[0] + (next[0] - current[0]) * ratio + perpendicularLat + randomVariation;
+          const lng = current[1] + (next[1] - current[1]) * ratio + perpendicularLng + randomVariation;
           
           enhanced.push([lat, lng]);
         }
@@ -484,41 +582,56 @@
       return enhanced;
     }
 
-    // Calculate time difference in seconds
+    // Calculate time difference in seconds - handles UTC timestamps
     function calculateTimeDifference(timestamp1, timestamp2) {
       if (!timestamp1 || !timestamp2) return 0;
       
       try {
-        const time1 = new Date(timestamp1);
-        const time2 = new Date(timestamp2);
+        // Parse timestamps as UTC if no timezone info is present
+        let time1, time2;
+        
+        if (timestamp1.includes('Z') || timestamp1.includes('+') || timestamp1.includes('-')) {
+          time1 = new Date(timestamp1);
+        } else {
+          time1 = new Date(timestamp1.endsWith('Z') ? timestamp1 : timestamp1 + 'Z');
+        }
+        
+        if (timestamp2.includes('Z') || timestamp2.includes('+') || timestamp2.includes('-')) {
+          time2 = new Date(timestamp2);
+        } else {
+          time2 = new Date(timestamp2.endsWith('Z') ? timestamp2 : timestamp2 + 'Z');
+        }
+        
         return (time2 - time1) / 1000; // Convert to seconds
       } catch (e) {
         return 0;
       }
     }
 
-    // Try realistic routing with open-source services only
+    // Try realistic routing with open-source services
     function tryRealisticRouting(waypoints, data) {
-      console.log('Attempting realistic road-following routing...');
+      console.log('Attempting open-source routing...');
       
-      // Try OSRM first (open-source, no API key required)
+      // Try OSRM first (open-source, no API key required, no coordinate limits)
       tryOSRMRouting(waypoints, data)
-        .catch(() => {
-          console.log('OSRM failed, trying GraphHopper free tier...');
+        .catch((error) => {
+          console.log('OSRM failed:', error.message);
+          console.log('Trying GraphHopper free tier...');
           return tryGraphHopperFreeRouting(waypoints, data);
         })
-        .catch(() => {
-          console.log('All routing services failed, using enhanced GPS track fallback');
-          fallbackToEnhancedRoute(waypoints, data);
+        .catch((error) => {
+          console.log('GraphHopper failed:', error.message);
+          console.log('Using enhanced GPS track fallback');
+          showEnhancedRoute(waypoints, data);
         });
     }
 
-    // Try OSRM routing with CORS proxy (open-source, no API key)
+    // Try OSRM routing (open-source, no API key, no coordinate limits)
     function tryOSRMRouting(waypoints, data) {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('OSRM timeout'));
-        }, 10000);
+        }, 15000);
 
         try {
           routingControl = L.Routing.control({
@@ -526,8 +639,8 @@
             routeWhileDragging: false,
             showAlternatives: false,
             router: L.Routing.osrmv1({
-              serviceUrl: 'https://cors-anywhere.herokuapp.com/https://router.project-osrm.org/route/v1',
-              timeout: 8000
+              serviceUrl: 'https://router.project-osrm.org/route/v1',
+              timeout: 12000
             }),
             lineOptions: {
               styles: [{color: '#667eea', weight: 6, opacity: 0.8}]
@@ -539,12 +652,14 @@
 
           routingControl.on('routesfound', function(e) {
             clearTimeout(timeout);
-            console.log('OSRM routing successful - replacing enhanced route');
+            console.log('OSRM routing successful - showing real road route');
             // Clear existing waypoint markers
             waypointMarkers.forEach(marker => map.removeLayer(marker));
             waypointMarkers = [];
             // Add new waypoint markers
             addWaypointMarkers(waypoints, data);
+            // Update success message
+            showSuccess(`Route loaded successfully with ${data.length} waypoints (real road route via OSRM)`);
             resolve();
           });
 
@@ -560,12 +675,12 @@
       });
     }
 
-    // Try GraphHopper free tier with CORS proxy (no API key required for basic usage)
+    // Try GraphHopper free tier (no API key required for basic usage)
     function tryGraphHopperFreeRouting(waypoints, data) {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           reject(new Error('GraphHopper timeout'));
-        }, 10000);
+        }, 15000);
 
         try {
           routingControl = L.Routing.control({
@@ -573,8 +688,8 @@
             routeWhileDragging: false,
             showAlternatives: false,
             router: L.Routing.graphHopper('', {
-              serviceUrl: 'https://cors-anywhere.herokuapp.com/https://graphhopper.com/api/1/route',
-              timeout: 8000
+              serviceUrl: 'https://graphhopper.com/api/1/route',
+              timeout: 12000
             }),
             lineOptions: {
               styles: [{color: '#667eea', weight: 6, opacity: 0.8}]
@@ -586,12 +701,14 @@
 
           routingControl.on('routesfound', function(e) {
             clearTimeout(timeout);
-            console.log('GraphHopper routing successful - replacing enhanced route');
+            console.log('GraphHopper routing successful - showing real road route');
             // Clear existing waypoint markers
             waypointMarkers.forEach(marker => map.removeLayer(marker));
             waypointMarkers = [];
             // Add new waypoint markers
             addWaypointMarkers(waypoints, data);
+            // Update success message
+            showSuccess(`Route loaded successfully with ${data.length} waypoints (real road route via GraphHopper)`);
             resolve();
           });
 
@@ -606,7 +723,6 @@
         }
       });
     }
-
 
     // Show enhanced GPS track immediately
     function showEnhancedRoute(waypoints, data) {
@@ -832,7 +948,7 @@
       updateInfoPanel(data);
       
       // Show success message and controls
-      showSuccess(`Route loaded successfully with ${data.length} waypoints (enhanced GPS track - attempting road-following upgrade)`);
+      showSuccess(`Route loaded successfully with ${data.length} waypoints (attempting real road routing with open-source services)`);
       document.getElementById('clearData').style.display = 'inline-block';
     }
 
@@ -924,6 +1040,7 @@
     // Initialize application
     document.addEventListener('DOMContentLoaded', function() {
       initializeMap();
+      initializeTimezoneDisplay();
       
       // Event listeners
       document.getElementById('csvFile').addEventListener('change', handleFileUpload);

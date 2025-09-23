@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Route Map CSV Uploader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css"
+  />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .header h1 {
+      margin: 0 0 10px 0;
+      font-size: 28px;
+      font-weight: 600;
+    }
+    
+    .header p {
+      margin: 0;
+      opacity: 0.9;
+      font-size: 16px;
+    }
+    
+    .upload-section {
+      background: white;
+      padding: 20px;
+      border-bottom: 1px solid #e0e0e0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .upload-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+    
+    .file-input-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+    
+    .file-input {
+      position: absolute;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+    
+    .file-input-button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .file-input-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .file-name {
+      color: #666;
+      font-size: 14px;
+      margin-left: 10px;
+    }
+    
+    .clear-button {
+      background: #ff6b6b;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+    }
+    
+    .clear-button:hover {
+      background: #ff5252;
+      transform: translateY(-2px);
+    }
+    
+    .info-panel {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 20px;
+      border-radius: 12px;
+      margin: 20px;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      max-width: 300px;
+      min-width: 250px;
+    }
+    
+    .info-panel h3 {
+      margin: 0 0 15px 0;
+      color: #333;
+      font-size: 16px;
+      text-align: center;
+      font-weight: 600;
+    }
+    
+    .info-panel p {
+      margin: 8px 0;
+      color: #555;
+      font-size: 14px;
+      font-weight: 500;
+      text-align: left;
+      padding: 8px 12px;
+      background: rgba(102, 126, 234, 0.05);
+      border-radius: 6px;
+      border-left: 3px solid #667eea;
+    }
+    
+    #map { 
+      height: calc(100vh - 180px); 
+      width: 100%; 
+    }
+    
+    .bottom-info {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      z-index: 1000;
+      transform: translateY(120%);
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .bottom-info.show {
+      transform: translateY(0);
+    }
+    
+    .error-message {
+      background: #ffebee;
+      color: #c62828;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+      border-left: 4px solid #f44336;
+    }
+    
+    .success-message {
+      background: #e8f5e8;
+      color: #2e7d32;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+      border-left: 4px solid #4caf50;
+    }
+    
+    .loading {
+      display: none;
+      color: #667eea;
+      font-weight: 500;
+    }
+    
+    .loading.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🗺️ Route Map CSV Uploader</h1>
+    <p>Upload a CSV file with latitude, longitude, and timestamp data to visualize your route</p>
+  </div>
+  
+  <div class="upload-section">
+    <div class="upload-container">
+      <div class="file-input-wrapper">
+        <input type="file" id="csvFile" class="file-input" accept=".csv" />
+        <button class="file-input-button">
+          📁 Choose CSV File
+        </button>
+      </div>
+      <span id="fileName" class="file-name"></span>
+      <button id="clearData" class="clear-button" style="display: none;">
+        🗑️ Clear Map
+      </button>
+    </div>
+    
+    <div id="loading" class="loading">
+      ⏳ Processing CSV file...
+    </div>
+    
+    <div id="errorMessage" class="error-message" style="display: none;"></div>
+    <div id="successMessage" class="success-message" style="display: none;"></div>
+    
+  </div>
+  
+  <div id="map"></div>
+  
+  <div id="infoPanel" class="bottom-info">
+    <div class="info-panel">
+      <h3>📊 Route Information</h3>
+      <p id="waypointCount"></p>
+      <p id="routeDuration"></p>
+      <p id="routeDistance"></p>
+      <p id="averageSpeed"></p>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+
+  <script>
+    // Global variables
+    let map;
+    let routingControl = null;
+    let waypointMarkers = [];
+    let currentRouteData = null;
+
+    // Initialize map
+    function initializeMap() {
+      map = L.map('map').setView([59.15397716, 17.64833628], 10);
+
+    // Add base layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    }
+
+    // Parse a single CSV line handling quoted fields properly
+    function parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      
+      // Add the last field
+      result.push(current.trim());
+      
+      return result;
+    }
+
+    // Parse CSV content
+    function parseCSV(csvText) {
+      if (!csvText || typeof csvText !== 'string') {
+        throw new Error('Invalid CSV content');
+      }
+      
+      const lines = csvText.trim().split('\n');
+      if (lines.length < 2) {
+        throw new Error('CSV must contain at least a header row and one data row');
+      }
+      
+      // Handle mixed CSV format (quoted headers, unquoted data)
+      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+      console.log('CSV Headers:', headers);
+      
+      // Find required columns
+      const latIndex = headers.findIndex(h => h.toLowerCase().includes('lat'));
+      const lngIndex = headers.findIndex(h => h.toLowerCase().includes('lng') || h.toLowerCase().includes('lon'));
+      const timeIndex = headers.findIndex(h => h.toLowerCase().includes('created_at') || h.toLowerCase().includes('timestamp') || h.toLowerCase().includes('time'));
+      const speedIndex = headers.findIndex(h => h.toLowerCase().includes('speed'));
+      
+      console.log('Column indices - Lat:', latIndex, 'Lng:', lngIndex, 'Time:', timeIndex, 'Speed:', speedIndex);
+      
+      if (latIndex === -1 || lngIndex === -1) {
+        throw new Error(`CSV must contain latitude and longitude columns. Found headers: ${headers.join(', ')}`);
+      }
+      
+      const data = [];
+      let validRows = 0;
+      let invalidRows = 0;
+      
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue; // Skip empty lines
+        
+        // Parse CSV line properly handling quoted fields
+        const values = parseCSVLine(line);
+        console.log(`Row ${i + 1} values:`, values);
+        
+        if (values.length >= Math.max(latIndex, lngIndex) + 1) {
+          const lat = parseFloat(values[latIndex]);
+          const lng = parseFloat(values[lngIndex]);
+          const timestamp = timeIndex !== -1 ? values[timeIndex] : null;
+          const speed = speedIndex !== -1 ? parseFloat(values[speedIndex]) : null;
+          
+          if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+            data.push({
+              lat: lat,
+              lng: lng,
+              timestamp: timestamp,
+              speed: speed,
+              index: i - 1
+            });
+            validRows++;
+          } else {
+            invalidRows++;
+            console.log(`Invalid coordinates in row ${i + 1}: lat=${values[latIndex]}, lng=${values[lngIndex]}`);
+          }
+        } else {
+          invalidRows++;
+          console.log(`Insufficient columns in row ${i + 1}: expected at least ${Math.max(latIndex, lngIndex) + 1}, got ${values.length}`);
+        }
+      }
+      
+      console.log(`CSV parsing complete: ${validRows} valid rows, ${invalidRows} invalid rows`);
+      
+      if (data.length === 0) {
+        throw new Error('No valid coordinate data found in CSV');
+      }
+      
+      return data;
+    }
+
+    // Calculate distance between two points
+    function calculateDistance(lat1, lng1, lat2, lng2) {
+      const R = 6371; // Earth's radius in kilometers
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    // Format timestamp
+    function formatTimestamp(timestamp) {
+      if (!timestamp) return 'No timestamp';
+      
+      try {
+        const date = new Date(timestamp);
+        return date.toLocaleString();
+      } catch (e) {
+        return timestamp;
+      }
+    }
+
+    // Calculate route duration
+    function calculateDuration(data) {
+      if (data.length < 2) return 'N/A';
+      
+      const firstTime = data[0].timestamp;
+      const lastTime = data[data.length - 1].timestamp;
+      
+      if (!firstTime || !lastTime) return 'N/A';
+      
+      try {
+        const start = new Date(firstTime);
+        const end = new Date(lastTime);
+        const durationMs = end - start;
+        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+        return `${hours}h ${minutes}m`;
+      } catch (e) {
+        return 'N/A';
+      }
+    }
+
+    // Calculate total distance
+    function calculateTotalDistance(data) {
+      if (data.length < 2) return 0;
+      
+      let totalDistance = 0;
+      for (let i = 1; i < data.length; i++) {
+        totalDistance += calculateDistance(
+          data[i-1].lat, data[i-1].lng,
+          data[i].lat, data[i].lng
+        );
+      }
+      return totalDistance;
+    }
+
+    // Convert speed from m/s to km/h
+    function convertSpeedToKmh(speedMs) {
+      if (speedMs === null || isNaN(speedMs)) return null;
+      return speedMs * 3.6; // Convert m/s to km/h
+    }
+
+    // Calculate average speed
+    function calculateAverageSpeed(data) {
+      if (data.length === 0) return 'N/A';
+      
+      const speeds = data.filter(point => point.speed !== null && !isNaN(point.speed) && point.speed >= 0);
+      
+      if (speeds.length === 0) return 'N/A';
+      
+      const totalSpeed = speeds.reduce((sum, point) => sum + convertSpeedToKmh(point.speed), 0);
+      const averageSpeed = totalSpeed / speeds.length;
+      
+      return `${averageSpeed.toFixed(1)} km/h`;
+    }
+
+    // Format speed
+    function formatSpeed(speed) {
+      if (speed === null || isNaN(speed)) return 'N/A';
+      const speedKmh = convertSpeedToKmh(speed);
+      return `${speedKmh.toFixed(1)} km/h`;
+    }
+
+    // Create enhanced route that looks more realistic
+    function createEnhancedRoute(coordinates, data) {
+      if (coordinates.length < 2) return coordinates;
+      
+      const enhanced = [coordinates[0]]; // Start with first point
+      
+      for (let i = 0; i < coordinates.length - 1; i++) {
+        const current = coordinates[i];
+        const next = coordinates[i + 1];
+        const currentData = data[i];
+        const nextData = data[i + 1];
+        
+        // Calculate distance and time between points
+        const distance = calculateDistance(current[0], current[1], next[0], next[1]);
+        const timeDiff = calculateTimeDifference(currentData.timestamp, nextData.timestamp);
+        
+        // Calculate average speed for this segment
+        const avgSpeed = timeDiff > 0 ? (distance / (timeDiff / 3600)) : 0; // km/h
+        
+        // Determine how many intermediate points to add based on speed and distance
+        let numPoints = 0;
+        if (distance > 0.05) { // 50m minimum
+          if (avgSpeed > 50) { // High speed - fewer points (highway)
+            numPoints = Math.min(Math.floor(distance * 5), 3);
+          } else if (avgSpeed > 20) { // Medium speed - moderate points (city)
+            numPoints = Math.min(Math.floor(distance * 8), 4);
+          } else { // Low speed - more points (residential/stop-and-go)
+            numPoints = Math.min(Math.floor(distance * 12), 6);
+          }
+        }
+        
+        // Add intermediate points with slight curve variation
+        for (let j = 1; j <= numPoints; j++) {
+          const ratio = j / (numPoints + 1);
+          
+          // Add slight curve variation to make it look more natural
+          const curveFactor = Math.sin(ratio * Math.PI) * 0.0001; // Small curve
+          const perpendicularLat = (next[1] - current[1]) * curveFactor;
+          const perpendicularLng = -(next[0] - current[0]) * curveFactor;
+          
+          const lat = current[0] + (next[0] - current[0]) * ratio + perpendicularLat;
+          const lng = current[1] + (next[1] - current[1]) * ratio + perpendicularLng;
+          
+          enhanced.push([lat, lng]);
+        }
+        
+        enhanced.push(next); // Add the next waypoint
+      }
+      
+      return enhanced;
+    }
+
+    // Calculate time difference in seconds
+    function calculateTimeDifference(timestamp1, timestamp2) {
+      if (!timestamp1 || !timestamp2) return 0;
+      
+      try {
+        const time1 = new Date(timestamp1);
+        const time2 = new Date(timestamp2);
+        return (time2 - time1) / 1000; // Convert to seconds
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    // Try realistic routing with open-source services only
+    function tryRealisticRouting(waypoints, data) {
+      console.log('Attempting realistic road-following routing...');
+      
+      // Try OSRM first (open-source, no API key required)
+      tryOSRMRouting(waypoints, data)
+        .catch(() => {
+          console.log('OSRM failed, trying GraphHopper free tier...');
+          return tryGraphHopperFreeRouting(waypoints, data);
+        })
+        .catch(() => {
+          console.log('All routing services failed, using enhanced GPS track fallback');
+          fallbackToEnhancedRoute(waypoints, data);
+        });
+    }
+
+    // Try OSRM routing (open-source, no API key)
+    function tryOSRMRouting(waypoints, data) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('OSRM timeout'));
+        }, 10000);
+
+        try {
+          routingControl = L.Routing.control({
+            waypoints: waypoints,
+            routeWhileDragging: false,
+            showAlternatives: false,
+            router: L.Routing.osrmv1({
+              serviceUrl: 'https://router.project-osrm.org/route/v1',
+              timeout: 8000
+            }),
+            lineOptions: {
+              styles: [{color: '#667eea', weight: 6, opacity: 0.8}]
+            },
+            createMarker: function(i, waypoint, n) {
+              return createWaypointMarker(i, waypoint, data[i] || {});
+            }
+          }).addTo(map);
+
+          routingControl.on('routesfound', function(e) {
+            clearTimeout(timeout);
+            console.log('OSRM routing successful - replacing enhanced route');
+            // Clear existing waypoint markers
+            waypointMarkers.forEach(marker => map.removeLayer(marker));
+            waypointMarkers = [];
+            // Add new waypoint markers
+            addWaypointMarkers(waypoints, data);
+            resolve();
+          });
+
+          routingControl.on('routingerror', function(e) {
+            clearTimeout(timeout);
+            reject(new Error('OSRM routing error'));
+          });
+
+        } catch (error) {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
+    }
+
+    // Try GraphHopper free tier (no API key required for basic usage)
+    function tryGraphHopperFreeRouting(waypoints, data) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('GraphHopper timeout'));
+        }, 10000);
+
+        try {
+          routingControl = L.Routing.control({
+            waypoints: waypoints,
+      routeWhileDragging: false,
+      showAlternatives: false,
+            router: L.Routing.graphHopper('', {
+              serviceUrl: 'https://graphhopper.com/api/1/route',
+              timeout: 8000
+            }),
+      lineOptions: {
+              styles: [{color: '#667eea', weight: 6, opacity: 0.8}]
+            },
+            createMarker: function(i, waypoint, n) {
+              return createWaypointMarker(i, waypoint, data[i] || {});
+      }
+    }).addTo(map);
+
+          routingControl.on('routesfound', function(e) {
+            clearTimeout(timeout);
+            console.log('GraphHopper routing successful - replacing enhanced route');
+            // Clear existing waypoint markers
+            waypointMarkers.forEach(marker => map.removeLayer(marker));
+            waypointMarkers = [];
+            // Add new waypoint markers
+            addWaypointMarkers(waypoints, data);
+            resolve();
+          });
+
+          routingControl.on('routingerror', function(e) {
+            clearTimeout(timeout);
+            reject(new Error('GraphHopper routing error'));
+          });
+
+        } catch (error) {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
+    }
+
+
+    // Show enhanced GPS track immediately
+    function showEnhancedRoute(waypoints, data) {
+      console.log('Showing enhanced GPS track route');
+      
+      // Create enhanced route
+      const routeCoordinates = waypoints.map(wp => [wp.lat, wp.lng]);
+      const enhancedRoute = createEnhancedRoute(routeCoordinates, data);
+      
+      // Add route polyline
+      const routePolyline = L.polyline(enhancedRoute, {
+        color: '#667eea',
+        weight: 6,
+        opacity: 0.8,
+        smoothFactor: 1,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+      
+      routingControl = routePolyline;
+      addWaypointMarkers(waypoints, data);
+    }
+
+    // Fallback to enhanced GPS track
+    function fallbackToEnhancedRoute(waypoints, data) {
+      console.log('Using enhanced GPS track fallback');
+      showEnhancedRoute(waypoints, data);
+    }
+
+    // Create waypoint marker
+    function createWaypointMarker(i, waypoint, pointData) {
+      const marker = L.marker(waypoint.latLng, {
+        icon: L.divIcon({
+          className: 'custom-marker',
+          html: `<div style="
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            border: 3px solid white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          ">${i + 1}</div>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15]
+        })
+      });
+      
+      // Handle case where pointData might be empty or undefined
+      const lat = pointData && pointData.lat ? pointData.lat.toFixed(6) : waypoint.lat.toFixed(6);
+      const lng = pointData && pointData.lng ? pointData.lng.toFixed(6) : waypoint.lng.toFixed(6);
+      
+      const popupContent = `
+        <div style="min-width: 200px;">
+          <h4 style="margin: 0 0 10px 0; color: #333;">Waypoint ${i + 1}</h4>
+          <p style="margin: 5px 0;"><strong>Coordinates:</strong><br>
+            ${lat}, ${lng}</p>
+          <p style="margin: 5px 0;"><strong>Time:</strong><br>
+            ${formatTimestamp(pointData && pointData.timestamp ? pointData.timestamp : null)}</p>
+          <p style="margin: 5px 0;"><strong>Speed:</strong><br>
+            ${formatSpeed(pointData && pointData.speed ? pointData.speed : null)}</p>
+        </div>
+      `;
+      marker.bindPopup(popupContent);
+      
+      waypointMarkers.push(marker);
+      return marker;
+    }
+
+    // Add waypoint markers manually
+    function addWaypointMarkers(waypoints, data) {
+      waypoints.forEach((waypoint, i) => {
+        const pointData = data[i];
+        const marker = L.marker([waypoint.lat, waypoint.lng], {
+          icon: L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="
+              background: #667eea;
+              color: white;
+              border-radius: 50%;
+              width: 30px;
+              height: 30px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-weight: bold;
+              font-size: 12px;
+              border: 3px solid white;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            ">${i + 1}</div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+          })
+        });
+        
+        const popupContent = `
+          <div style="min-width: 200px;">
+            <h4 style="margin: 0 0 10px 0; color: #333;">Waypoint ${i + 1}</h4>
+            <p style="margin: 5px 0;"><strong>Coordinates:</strong><br>
+              ${pointData.lat.toFixed(6)}, ${pointData.lng.toFixed(6)}</p>
+            <p style="margin: 5px 0;"><strong>Time:</strong><br>
+              ${formatTimestamp(pointData.timestamp)}</p>
+            <p style="margin: 5px 0;"><strong>Speed:</strong><br>
+              ${formatSpeed(pointData.speed)}</p>
+          </div>
+        `;
+        marker.bindPopup(popupContent);
+        
+        waypointMarkers.push(marker);
+        marker.addTo(map);
+      });
+    }
+
+    // Smooth route by adding intermediate points (legacy function)
+    function smoothRoute(coordinates) {
+      if (coordinates.length < 2) return coordinates;
+      
+      const smoothed = [coordinates[0]]; // Start with first point
+      
+      for (let i = 0; i < coordinates.length - 1; i++) {
+        const current = coordinates[i];
+        const next = coordinates[i + 1];
+        
+        // Calculate distance between points
+        const distance = calculateDistance(current[0], current[1], next[0], next[1]);
+        
+        // If distance is significant, add intermediate points
+        if (distance > 0.1) { // 0.1 km = 100m
+          const numPoints = Math.min(Math.floor(distance * 10), 5); // Max 5 intermediate points
+          
+          for (let j = 1; j <= numPoints; j++) {
+            const ratio = j / (numPoints + 1);
+            const lat = current[0] + (next[0] - current[0]) * ratio;
+            const lng = current[1] + (next[1] - current[1]) * ratio;
+            smoothed.push([lat, lng]);
+          }
+        }
+        
+        smoothed.push(next); // Add the next waypoint
+      }
+      
+      return smoothed;
+    }
+
+    // Clear existing route and markers
+    function clearMap() {
+      if (routingControl) {
+        // Check if it's a routing control or a polyline
+        if (routingControl.remove) {
+          // It's a routing control
+          map.removeControl(routingControl);
+        } else {
+          // It's a polyline
+          map.removeLayer(routingControl);
+        }
+        routingControl = null;
+      }
+      
+      waypointMarkers.forEach(marker => map.removeLayer(marker));
+      waypointMarkers = [];
+      
+      document.getElementById('infoPanel').classList.remove('show');
+      document.getElementById('clearData').style.display = 'none';
+      document.getElementById('successMessage').style.display = 'none';
+      document.getElementById('errorMessage').style.display = 'none';
+    }
+
+    // Display route on map
+    function displayRoute(data) {
+      clearMap();
+      
+      if (!data || !Array.isArray(data) || data.length === 0) {
+        showError('No valid data points found in CSV');
+        return;
+      }
+      
+      // Validate data structure
+      const validData = data.filter(point => {
+        return point && 
+               typeof point.lat === 'number' && 
+               typeof point.lng === 'number' && 
+               !isNaN(point.lat) && 
+               !isNaN(point.lng);
+      });
+      
+      if (validData.length === 0) {
+        showError('No valid coordinates found in CSV data');
+        return;
+      }
+      
+      if (validData.length !== data.length) {
+        console.log(`Filtered out ${data.length - validData.length} invalid data points`);
+      }
+      
+      currentRouteData = validData;
+      
+      // Create waypoints for routing
+      const waypoints = validData.map(point => L.latLng(point.lat, point.lng));
+      
+      // Show enhanced GPS track immediately
+      showEnhancedRoute(waypoints, validData);
+      
+      // Try to get realistic road-following route in background
+      tryRealisticRouting(waypoints, validData);
+
+
+      // Fit map to route bounds
+      if (waypointMarkers.length > 0) {
+        const group = new L.featureGroup(waypointMarkers);
+        map.fitBounds(group.getBounds().pad(0.1));
+      } else {
+        // Fallback: fit to waypoints directly
+        const bounds = L.latLngBounds(waypoints);
+        map.fitBounds(bounds.pad(0.1));
+      }
+      
+      // Update info panel
+      updateInfoPanel(data);
+      
+      // Show success message and controls
+      showSuccess(`Route loaded successfully with ${data.length} waypoints (enhanced GPS track - attempting road-following upgrade)`);
+      document.getElementById('clearData').style.display = 'inline-block';
+    }
+
+    // Update info panel
+    function updateInfoPanel(data) {
+      const waypointCount = data.length;
+      const duration = calculateDuration(data);
+      const distance = calculateTotalDistance(data);
+      const avgSpeed = calculateAverageSpeed(data);
+      
+      document.getElementById('waypointCount').textContent = `📍 Waypoints: ${waypointCount}`;
+      document.getElementById('routeDuration').textContent = `⏱️ Duration: ${duration}`;
+      document.getElementById('routeDistance').textContent = `📏 Distance: ${distance.toFixed(2)} km`;
+      document.getElementById('averageSpeed').textContent = `🚗 Avg Speed: ${avgSpeed}`;
+      
+      document.getElementById('infoPanel').classList.add('show');
+    }
+
+    // Show error message
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      document.getElementById('successMessage').style.display = 'none';
+    }
+
+    // Show success message
+    function showSuccess(message) {
+      const successDiv = document.getElementById('successMessage');
+      successDiv.textContent = message;
+      successDiv.style.display = 'block';
+      document.getElementById('errorMessage').style.display = 'none';
+    }
+
+    // Hide messages
+    function hideMessages() {
+      document.getElementById('errorMessage').style.display = 'none';
+      document.getElementById('successMessage').style.display = 'none';
+    }
+
+    // File upload handler
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      hideMessages();
+      document.getElementById('loading').classList.add('show');
+      document.getElementById('fileName').textContent = file.name;
+      
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const csvText = e.target.result;
+          console.log('File content length:', csvText.length);
+          console.log('First 200 characters:', csvText.substring(0, 200));
+          
+          const data = parseCSV(csvText);
+          console.log('Parsed data:', data);
+          
+          if (!data || data.length === 0) {
+            throw new Error('No valid data could be parsed from CSV');
+          }
+          
+          displayRoute(data);
+        } catch (error) {
+          console.error('CSV processing error:', error);
+          showError(`Error processing CSV: ${error.message}`);
+        } finally {
+          document.getElementById('loading').classList.remove('show');
+        }
+      };
+      
+      reader.onerror = function() {
+        showError('Error reading file');
+        document.getElementById('loading').classList.remove('show');
+      };
+      
+      reader.readAsText(file);
+    }
+
+    // Clear data handler
+    function handleClearData() {
+      clearMap();
+      document.getElementById('csvFile').value = '';
+      document.getElementById('fileName').textContent = '';
+      hideMessages();
+    }
+
+    // Initialize application
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeMap();
+      
+      // Event listeners
+      document.getElementById('csvFile').addEventListener('change', handleFileUpload);
+      document.getElementById('clearData').addEventListener('click', handleClearData);
+      
+      // Load default data if available
+      const defaultData = [
+        {lat: 59.15397716, lng: 17.64833628, timestamp: "2025-09-16 11:04:48", index: 0},
+        {lat: 59.17038923, lng: 17.64826827, timestamp: "2025-09-16 11:07:08", index: 1},
+        {lat: 59.18841334, lng: 17.64640167, timestamp: "2025-09-16 11:08:32", index: 2},
+        {lat: 59.20068667, lng: 17.66596828, timestamp: "2025-09-16 11:09:48", index: 3},
+        {lat: 59.20176394, lng: 17.66980898, timestamp: "2025-09-16 11:09:58", index: 4}
+      ];
+      
+      // Uncomment the line below to load default data on startup
+      // displayRoute(defaultData);
+    });
+  </script>
+</body>
+</html>

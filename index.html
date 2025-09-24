@@ -257,6 +257,8 @@
       <p id="routeDuration"></p>
       <p id="routeDistance"></p>
       <p id="averageSpeed"></p>
+      <p id="maxSpeed"></p>
+      <p id="medianSpeed"></p>
     </div>
   </div>
 
@@ -511,6 +513,40 @@
       const averageSpeed = totalSpeed / speeds.length;
       
       return `${averageSpeed.toFixed(1)} km/h`;
+    }
+
+    // Calculate max speed
+    function calculateMaxSpeed(data) {
+      if (data.length === 0) return 'N/A';
+      
+      const speeds = data.filter(point => point.speed !== null && !isNaN(point.speed) && point.speed >= 0);
+      
+      if (speeds.length === 0) return 'N/A';
+      
+      const maxSpeed = Math.max(...speeds.map(point => convertSpeedToKmh(point.speed)));
+      
+      return `${maxSpeed.toFixed(1)} km/h`;
+    }
+
+    // Calculate median speed
+    function calculateMedianSpeed(data) {
+      if (data.length === 0) return 'N/A';
+      
+      const speeds = data.filter(point => point.speed !== null && !isNaN(point.speed) && point.speed >= 0);
+      
+      if (speeds.length === 0) return 'N/A';
+      
+      const speedValues = speeds.map(point => convertSpeedToKmh(point.speed)).sort((a, b) => a - b);
+      const middle = Math.floor(speedValues.length / 2);
+      
+      let medianSpeed;
+      if (speedValues.length % 2 === 0) {
+        medianSpeed = (speedValues[middle - 1] + speedValues[middle]) / 2;
+      } else {
+        medianSpeed = speedValues[middle];
+      }
+      
+      return `${medianSpeed.toFixed(1)} km/h`;
     }
 
     // Format speed
@@ -980,11 +1016,15 @@
       const duration = calculateDuration(data);
       const distance = calculateTotalDistance(data);
       const avgSpeed = calculateAverageSpeed(data);
+      const maxSpeed = calculateMaxSpeed(data);
+      const medianSpeed = calculateMedianSpeed(data);
       
       document.getElementById('waypointCount').textContent = `📍 Waypoints: ${waypointCount}`;
       document.getElementById('routeDuration').textContent = `⏱️ Duration: ${duration}`;
       document.getElementById('routeDistance').textContent = `📏 Distance: ${distance.toFixed(2)} km`;
       document.getElementById('averageSpeed').textContent = `🚗 Avg Speed: ${avgSpeed}`;
+      document.getElementById('maxSpeed').textContent = `🏎️ Max Speed: ${maxSpeed}`;
+      document.getElementById('medianSpeed').textContent = `📊 Median Speed: ${medianSpeed}`;
       
       document.getElementById('infoPanel').classList.add('show');
     }

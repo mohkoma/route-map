@@ -267,6 +267,7 @@
     // Global variables
     let map;
     let routingControl = null;
+    let enhancedRoutePolyline = null; // Track the enhanced GPS track polyline
     let waypointMarkers = [];
     let currentRouteData = null;
 
@@ -653,6 +654,8 @@
           routingControl.on('routesfound', function(e) {
             clearTimeout(timeout);
             console.log('OSRM routing successful - showing real road route');
+            // Hide enhanced GPS track
+            hideEnhancedRoute();
             // Clear existing waypoint markers
             waypointMarkers.forEach(marker => map.removeLayer(marker));
             waypointMarkers = [];
@@ -702,6 +705,8 @@
           routingControl.on('routesfound', function(e) {
             clearTimeout(timeout);
             console.log('GraphHopper routing successful - showing real road route');
+            // Hide enhanced GPS track
+            hideEnhancedRoute();
             // Clear existing waypoint markers
             waypointMarkers.forEach(marker => map.removeLayer(marker));
             waypointMarkers = [];
@@ -742,8 +747,19 @@
         lineJoin: 'round'
       }).addTo(map);
       
+      // Store reference to enhanced route polyline
+      enhancedRoutePolyline = routePolyline;
       routingControl = routePolyline;
       addWaypointMarkers(waypoints, data);
+    }
+
+    // Hide enhanced GPS track when API routing succeeds
+    function hideEnhancedRoute() {
+      if (enhancedRoutePolyline) {
+        console.log('Hiding enhanced GPS track - API routing succeeded');
+        map.removeLayer(enhancedRoutePolyline);
+        enhancedRoutePolyline = null;
+      }
     }
 
     // Fallback to enhanced GPS track
@@ -884,6 +900,12 @@
           map.removeLayer(routingControl);
         }
         routingControl = null;
+      }
+      
+      // Clear enhanced route polyline if it exists
+      if (enhancedRoutePolyline) {
+        map.removeLayer(enhancedRoutePolyline);
+        enhancedRoutePolyline = null;
       }
       
       waypointMarkers.forEach(marker => map.removeLayer(marker));

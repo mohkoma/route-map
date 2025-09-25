@@ -280,10 +280,23 @@
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         const timezoneName = timezone.replace(/_/g, ' '); // Replace underscores with spaces
         
+        // Get timezone offset
+        const now = new Date();
+        const offsetMinutes = now.getTimezoneOffset();
+        const offsetHours = Math.abs(offsetMinutes) / 60;
+        const offsetSign = offsetMinutes <= 0 ? '+' : '-';
+        const offsetString = `UTC${offsetSign}${offsetHours}`;
+        
         // Update the display
-        document.getElementById('timezoneName').textContent = timezoneName;
+        document.getElementById('timezoneName').textContent = `${timezoneName} (${offsetString})`;
         
         console.log('User timezone detected:', timezone);
+        console.log('Timezone offset:', offsetString, 'minutes:', offsetMinutes);
+        
+        // Test UTC conversion with current time
+        const testUtcTime = '2025-01-15 09:00:00';
+        const testDate = new Date(testUtcTime + 'Z');
+        console.log(`Test: UTC "${testUtcTime}" converts to local: "${testDate.toLocaleString()}"`);
       } catch (e) {
         console.error('Error detecting timezone:', e);
         document.getElementById('timezoneName').textContent = 'Unknown';
@@ -415,17 +428,20 @@
       if (!timestamp) return 'No timestamp';
       
       try {
-        // Parse the timestamp and treat it as UTC if it doesn't have timezone info
         let date;
+        let isUtc = false;
         
         // Check if timestamp already has timezone info (contains 'Z', '+', or '-')
         if (timestamp.includes('Z') || timestamp.includes('+') || timestamp.includes('-')) {
+          // Timestamp has timezone info, parse as-is
           date = new Date(timestamp);
+          isUtc = timestamp.includes('Z') || timestamp.includes('+00:00');
         } else {
-          // Assume UTC if no timezone info is present
-          // Add 'Z' to indicate UTC timezone
+          // No timezone info - treat as UTC and convert to local
+          // Parse as UTC by adding 'Z' suffix
           const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
           date = new Date(utcTimestamp);
+          isUtc = true;
         }
         
         // Check if date is valid
@@ -434,6 +450,7 @@
         }
         
         // Format in user's local timezone as YYYY-MM-DD HH:MM:SS
+        // The Date object automatically handles UTC to local conversion
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
@@ -441,8 +458,14 @@
         const minutes = String(date.getMinutes()).padStart(2, '0');
         const seconds = String(date.getSeconds()).padStart(2, '0');
         
+        // Debug logging to help identify timezone issues
+        if (isUtc) {
+          console.log(`UTC timestamp "${timestamp}" converted to local: "${year}-${month}-${day} ${hours}:${minutes}:${seconds}"`);
+        }
+        
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       } catch (e) {
+        console.error('Error formatting timestamp:', e);
         return timestamp;
       }
     }
@@ -463,12 +486,14 @@
         if (firstTime.includes('Z') || firstTime.includes('+') || firstTime.includes('-')) {
           start = new Date(firstTime);
         } else {
+          // Treat as UTC by adding 'Z' suffix
           start = new Date(firstTime.endsWith('Z') ? firstTime : firstTime + 'Z');
         }
         
         if (lastTime.includes('Z') || lastTime.includes('+') || lastTime.includes('-')) {
           end = new Date(lastTime);
         } else {
+          // Treat as UTC by adding 'Z' suffix
           end = new Date(lastTime.endsWith('Z') ? lastTime : lastTime + 'Z');
         }
         
@@ -630,12 +655,14 @@
         if (timestamp1.includes('Z') || timestamp1.includes('+') || timestamp1.includes('-')) {
           time1 = new Date(timestamp1);
         } else {
+          // Treat as UTC by adding 'Z' suffix
           time1 = new Date(timestamp1.endsWith('Z') ? timestamp1 : timestamp1 + 'Z');
         }
         
         if (timestamp2.includes('Z') || timestamp2.includes('+') || timestamp2.includes('-')) {
           time2 = new Date(timestamp2);
         } else {
+          // Treat as UTC by adding 'Z' suffix
           time2 = new Date(timestamp2.endsWith('Z') ? timestamp2 : timestamp2 + 'Z');
         }
         

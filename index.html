@@ -292,11 +292,6 @@
         
         console.log('User timezone detected:', timezone);
         console.log('Timezone offset:', offsetString, 'minutes:', offsetMinutes);
-        
-        // Test UTC conversion with current time
-        const testUtcTime = '2025-01-15 09:00:00';
-        const testDate = new Date(testUtcTime + 'Z');
-        console.log(`Test: UTC "${testUtcTime}" converts to local: "${testDate.toLocaleString()}"`);
       } catch (e) {
         console.error('Error detecting timezone:', e);
         document.getElementById('timezoneName').textContent = 'Unknown';
@@ -428,40 +423,30 @@
       if (!timestamp) return 'No timestamp';
       
       try {
-        let date;
-        let isUtc = false;
+        // Parse the timestamp as UTC (add Z if not present)
+        const utcTimestamp = timestamp.includes('Z') ? timestamp : timestamp + 'Z';
         
-        // Check if timestamp already has timezone info (contains 'Z', '+', or '-')
-        if (timestamp.includes('Z') || timestamp.includes('+') || timestamp.includes('-')) {
-          // Timestamp has timezone info, parse as-is
-          date = new Date(timestamp);
-          isUtc = timestamp.includes('Z') || timestamp.includes('+00:00');
-        } else {
-          // No timezone info - treat as UTC and convert to local
-          // Parse as UTC by adding 'Z' suffix
-          const utcTimestamp = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z';
-          date = new Date(utcTimestamp);
-          isUtc = true;
-        }
+        // Create Date object from UTC timestamp
+        const utcDate = new Date(utcTimestamp);
         
         // Check if date is valid
-        if (isNaN(date.getTime())) {
-          return timestamp; // Return original if parsing failed
+        if (isNaN(utcDate.getTime())) {
+          return timestamp;
         }
         
-        // Format in user's local timezone as YYYY-MM-DD HH:MM:SS
-        // The Date object automatically handles UTC to local conversion
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
+        // Get timezone offset in minutes
+        const timezoneOffset = utcDate.getTimezoneOffset();
         
-        // Debug logging to help identify timezone issues
-        if (isUtc) {
-          console.log(`UTC timestamp "${timestamp}" converted to local: "${year}-${month}-${day} ${hours}:${minutes}:${seconds}"`);
-        }
+        // Convert to local time by subtracting the offset
+        const localDate = new Date(utcDate.getTime() - (timezoneOffset * 60000));
+        
+        // Format the local date
+        const year = localDate.getUTCFullYear();
+        const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(localDate.getUTCDate()).padStart(2, '0');
+        const hours = String(localDate.getUTCHours()).padStart(2, '0');
+        const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+        const seconds = String(localDate.getUTCSeconds()).padStart(2, '0');
         
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       } catch (e) {
@@ -859,13 +844,16 @@
       const lat = pointData && pointData.lat ? pointData.lat.toFixed(6) : waypoint.lat.toFixed(6);
       const lng = pointData && pointData.lng ? pointData.lng.toFixed(6) : waypoint.lng.toFixed(6);
       
+      const timestamp = pointData && pointData.timestamp ? pointData.timestamp : null;
+      const formattedTime = formatTimestamp(timestamp);
+      
       const popupContent = `
         <div style="min-width: 200px;">
           <h4 style="margin: 0 0 10px 0; color: #333;">Waypoint ${i + 1}</h4>
           <p style="margin: 5px 0;"><strong>Coordinates:</strong><br>
             ${lat}, ${lng}</p>
           <p style="margin: 5px 0;"><strong>Time:</strong><br>
-            ${formatTimestamp(pointData && pointData.timestamp ? pointData.timestamp : null)}</p>
+            ${formattedTime}</p>
           <p style="margin: 5px 0;"><strong>Speed:</strong><br>
             ${formatSpeed(pointData && pointData.speed ? pointData.speed : null)}</p>
         </div>
@@ -902,13 +890,16 @@
           })
         });
         
+        const timestamp = pointData.timestamp;
+        const formattedTime = formatTimestamp(timestamp);
+        
         const popupContent = `
           <div style="min-width: 200px;">
             <h4 style="margin: 0 0 10px 0; color: #333;">Waypoint ${i + 1}</h4>
             <p style="margin: 5px 0;"><strong>Coordinates:</strong><br>
               ${pointData.lat.toFixed(6)}, ${pointData.lng.toFixed(6)}</p>
             <p style="margin: 5px 0;"><strong>Time:</strong><br>
-              ${formatTimestamp(pointData.timestamp)}</p>
+              ${formattedTime}</p>
             <p style="margin: 5px 0;"><strong>Speed:</strong><br>
               ${formatSpeed(pointData.speed)}</p>
           </div>
@@ -1125,6 +1116,7 @@
       document.getElementById('fileName').textContent = '';
       hideMessages();
     }
+
 
     // Initialize application
     document.addEventListener('DOMContentLoaded', function() {

@@ -819,6 +819,7 @@
     // Create waypoint marker
     function createWaypointMarker(i, waypoint, pointData) {
       const marker = L.marker(waypoint.latLng, {
+        draggable: false,
         icon: L.divIcon({
           className: 'custom-marker',
           html: `<div style="
@@ -869,6 +870,7 @@
       waypoints.forEach((waypoint, i) => {
         const pointData = data[i];
         const marker = L.marker([waypoint.lat, waypoint.lng], {
+          draggable: false,
           icon: L.divIcon({
             className: 'custom-marker',
             html: `<div style="
